@@ -4140,7 +4140,6 @@ const external_process_namespaceObject = require("process");
 
 
 
-
 async function haveExecutable(path) {
     try {
         await external_fs_.promises.access(path, external_fs_.constants.X_OK);
@@ -4149,6 +4148,19 @@ async function haveExecutable(path) {
         return false;
     }
     return true;
+}
+async function hasFileTimeout(path, timeout_s) {
+    let time_s = 0;
+    return await new Promise((resolve, reject) => {
+        const timer = setInterval(function () {
+            time_s += 1;
+            let fileExists = external_fs_.existsSync(path);
+            if (fileExists || time_s >= timeout_s) {
+                clearInterval(timer);
+                resolve(fileExists);
+            }
+        }, 1000);
+    });
 }
 async function ensureSnapd() {
     const haveSnapd = await haveExecutable('/usr/bin/snap');
@@ -4164,60 +4176,27 @@ async function ensureSnapd() {
         await exec.exec('sudo', ['chown', 'root:root', '/']);
     }
 }
-async function ensureLXDNetwork() {
-    const mobyPackages = [
-        'moby-buildx',
-        'moby-engine',
-        'moby-cli',
-        'moby-compose',
-        'moby-containerd',
-        'moby-runc'
-    ];
-    const installedPackages = [];
-    const options = { silent: true };
-    for (const mobyPackage of mobyPackages) {
-        if ((await exec.exec('dpkg', ['-l', mobyPackage], options)) === 0) {
-            installedPackages.push(mobyPackage);
-        }
-    }
-    core.info(`Installed docker related packages might interfere with LXD networking: ${installedPackages}`);
-    // Removing docker is the best option, but some pipelines depend on it.
-    // https://linuxcontainers.org/lxd/docs/master/howto/network_bridge_firewalld/#prevent-issues-with-lxd-and-docker
-    // https://github.com/canonical/lxd-cloud/blob/f20a64a8af42485440dcbfd370faf14137d2f349/test/includes/lxd.sh#L13-L23
-    await exec.exec('sudo', ['iptables', '-P', 'FORWARD', 'ACCEPT']);
-}
-async function ensureLXD() {
-    const haveDebLXD = await haveExecutable('/usr/bin/lxd');
-    if (haveDebLXD) {
-        core.info('Removing legacy .deb packaged LXD...');
-        await exec.exec('sudo', ['apt-get', 'remove', '-qy', 'lxd', 'lxd-client']);
-    }
-    core.info(`Ensuring ${external_os_.userInfo().username} is in the lxd group...`);
-    await exec.exec('sudo', ['groupadd', '--force', '--system', 'lxd']);
+async function ensureMultipass() {
+    const haveMultipass = await haveExecutable('/snap/bin/multipass');
+    core.info('Installing Multipass...');
     await exec.exec('sudo', [
-        'usermod',
-        '--append',
-        '--groups',
-        'lxd',
-        external_os_.userInfo().username
+        'snap',
+        haveMultipass ? 'refresh' : 'install',
+        'multipass'
     ]);
-    // Ensure that the "lxd" group exists
-    const haveSnapLXD = await haveExecutable('/snap/bin/lxd');
-    core.info('Installing LXD...');
-    if (haveSnapLXD) {
-        try {
-            await exec.exec('sudo', ['snap', 'refresh', 'lxd']);
-        }
-        catch (err) {
-            core.info('LXD could not be refreshed...');
-        }
-    }
-    else {
-        await exec.exec('sudo', ['snap', 'install', 'lxd']);
-    }
-    core.info('Initialising LXD...');
-    await exec.exec('sudo', ['lxd', 'init', '--auto']);
-    await ensureLXDNetwork();
+    // Wait until multipass started up - usually this takes 3..5 seconds
+    await hasFileTimeout('/var/snap/multipass/common/multipass_socket', 60);
+    // Check permissions
+    await exec.exec('ls', ['-l', '/var/snap/multipass/common/multipass_socket']);
+    await exec.exec('groups');
+    await exec.exec('whoami');
+    // Add user to 'sudo' group
+    await exec.exec('sudo', ['usermod', '-a', '-G', 'sudo', 'runner']);
+    // switch group hence and forth to activate it
+    await exec.exec('groups');
+    await exec.exec('newgrp', ['sudo']);
+    await exec.exec('newgrp', []);
+    await exec.exec('groups');
 }
 async function ensureSnapcraft(channel) {
     const haveSnapcraft = await haveExecutable('/snap/bin/snapcraft');
@@ -4258,7 +4237,7 @@ class SnapcraftBuilder {
     async build() {
         core.startGroup('Installing Snapcraft plus dependencies');
         await ensureSnapd();
-        await ensureLXD();
+        await ensureMultipass();
         await ensureSnapcraft(this.snapcraftChannel);
         core.endGroup();
         const imageInfo = {
@@ -4268,7 +4247,7 @@ class SnapcraftBuilder {
         // Copy and update environment to pass to snapcraft
         const env = {};
         Object.assign(env, external_process_namespaceObject.env);
-        env['SNAPCRAFT_BUILD_ENVIRONMENT'] = 'lxd';
+        env['SNAPCRAFT_BUILD_ENVIRONMENT'] = 'multipass';
         env['SNAPCRAFT_IMAGE_INFO'] = JSON.stringify(imageInfo);
         if (this.includeBuildInfo) {
             env['SNAPCRAFT_BUILD_INFO'] = '1';
@@ -4280,7 +4259,7 @@ class SnapcraftBuilder {
         if (this.uaToken) {
             snapcraft = `${snapcraft} --ua-token ${this.uaToken}`;
         }
-        await exec.exec('sg', ['lxd', '-c', snapcraft], {
+        await exec.exec('snapcraft', [], {
             cwd: this.projectRoot,
             env
         });
