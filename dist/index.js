@@ -4124,9 +4124,9 @@ var __webpack_exports__ = {};
 __nccwpck_require__.r(__webpack_exports__);
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
-var core = __nccwpck_require__(186);
+var lib_core = __nccwpck_require__(186);
 // EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js
-var exec = __nccwpck_require__(514);
+var lib_exec = __nccwpck_require__(514);
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(147);
 // EXTERNAL MODULE: external "os"
@@ -4154,7 +4154,7 @@ async function hasFileTimeout(path, timeout_s) {
     return await new Promise((resolve, reject) => {
         const timer = setInterval(function () {
             time_s += 1;
-            let fileExists = external_fs_.existsSync(path);
+            let fileExists = fs.existsSync(path);
             if (fileExists || time_s >= timeout_s) {
                 clearInterval(timer);
                 resolve(fileExists);
@@ -4165,15 +4165,15 @@ async function hasFileTimeout(path, timeout_s) {
 async function ensureSnapd() {
     const haveSnapd = await haveExecutable('/usr/bin/snap');
     if (!haveSnapd) {
-        core.info('Installing snapd...');
-        await exec.exec('sudo', ['apt-get', 'update', '-q']);
-        await exec.exec('sudo', ['apt-get', 'install', '-qy', 'snapd']);
+        lib_core.info('Installing snapd...');
+        await lib_exec.exec('sudo', ['apt-get', 'update', '-q']);
+        await lib_exec.exec('sudo', ['apt-get', 'install', '-qy', 'snapd']);
     }
     // The Github worker environment has weird permissions on the root,
     // which trip up snap-confine.
     const root = await external_fs_.promises.stat('/');
     if (root.uid !== 0 || root.gid !== 0) {
-        await exec.exec('sudo', ['chown', 'root:root', '/']);
+        await lib_exec.exec('sudo', ['chown', 'root:root', '/']);
     }
 }
 async function ensureMultipass() {
@@ -4201,8 +4201,8 @@ async function ensureMultipass() {
 }
 async function ensureSnapcraft(channel) {
     const haveSnapcraft = await haveExecutable('/snap/bin/snapcraft');
-    core.info('Installing Snapcraft...');
-    await exec.exec('sudo', [
+    lib_core.info('Installing Snapcraft...');
+    await lib_exec.exec('sudo', [
         'snap',
         haveSnapcraft ? 'refresh' : 'install',
         '--channel',
@@ -4236,11 +4236,10 @@ class SnapcraftBuilder {
         this.uaToken = options.uaToken;
     }
     async build() {
-        core.startGroup('Installing Snapcraft plus dependencies');
+        lib_core.startGroup('Installing Snapcraft plus dependencies');
         await ensureSnapd();
-        await ensureMultipass();
         await ensureSnapcraft(this.snapcraftChannel);
-        core.endGroup();
+        lib_core.endGroup();
         const imageInfo = {
             // eslint-disable-next-line @typescript-eslint/naming-convention
             build_url: `https://github.com/${external_process_namespaceObject.env.GITHUB_REPOSITORY}/actions/runs/${external_process_namespaceObject.env.GITHUB_RUN_ID}`
@@ -4248,19 +4247,18 @@ class SnapcraftBuilder {
         // Copy and update environment to pass to snapcraft
         const env = {};
         Object.assign(env, external_process_namespaceObject.env);
-        env['SNAPCRAFT_BUILD_ENVIRONMENT'] = 'multipass';
         env['SNAPCRAFT_IMAGE_INFO'] = JSON.stringify(imageInfo);
         if (this.includeBuildInfo) {
             env['SNAPCRAFT_BUILD_INFO'] = '1';
         }
-        let snapcraft = 'snapcraft';
+        let snapcraft_args = '--destructive-mode';
         if (this.snapcraftArgs) {
-            snapcraft = `${snapcraft} ${this.snapcraftArgs}`;
+            snapcraft_args = `${snapcraft_args} ${this.snapcraftArgs}`;
         }
         if (this.uaToken) {
-            snapcraft = `${snapcraft} --ua-token ${this.uaToken}`;
+            snapcraft_args = `${snapcraft_args} --ua-token ${this.uaToken}`;
         }
-        await exec.exec('snapcraft', [], {
+        await lib_exec.exec('snapcraft', [snapcraft_args], {
             cwd: this.projectRoot,
             env
         });
@@ -4277,7 +4275,7 @@ class SnapcraftBuilder {
             throw new Error('No snap files produced by build');
         }
         if (snaps.length > 1) {
-            core.warning(`Multiple snaps found in ${this.projectRoot}`);
+            lib_core.warning(`Multiple snaps found in ${this.projectRoot}`);
         }
         return external_path_.join(this.projectRoot, snaps[0]);
     }
@@ -4289,12 +4287,12 @@ class SnapcraftBuilder {
 
 async function run() {
     try {
-        const projectRoot = core.getInput('path');
-        const includeBuildInfo = (core.getInput('build-info') || 'true').toUpperCase() === 'TRUE';
-        core.info(`Building Snapcraft project in "${projectRoot}"...`);
-        const snapcraftChannel = core.getInput('snapcraft-channel');
-        const snapcraftArgs = core.getInput('snapcraft-args');
-        const uaToken = core.getInput('ua-token');
+        const projectRoot = lib_core.getInput('path');
+        const includeBuildInfo = (lib_core.getInput('build-info') || 'true').toUpperCase() === 'TRUE';
+        lib_core.info(`Building Snapcraft project in "${projectRoot}"...`);
+        const snapcraftChannel = lib_core.getInput('snapcraft-channel');
+        const snapcraftArgs = lib_core.getInput('snapcraft-args');
+        const uaToken = lib_core.getInput('ua-token');
         const builder = new SnapcraftBuilder({
             projectRoot,
             includeBuildInfo,
@@ -4304,10 +4302,10 @@ async function run() {
         });
         await builder.build();
         const snap = await builder.outputSnap();
-        core.setOutput('snap', snap);
+        lib_core.setOutput('snap', snap);
     }
     catch (error) {
-        core.setFailed(error?.message);
+        lib_core.setFailed(error?.message);
     }
 }
 run();

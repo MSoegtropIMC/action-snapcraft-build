@@ -50,7 +50,6 @@ export class SnapcraftBuilder {
   async build(): Promise<void> {
     core.startGroup('Installing Snapcraft plus dependencies')
     await tools.ensureSnapd()
-    await tools.ensureMultipass()
     await tools.ensureSnapcraft(this.snapcraftChannel)
     core.endGroup()
 
@@ -61,21 +60,20 @@ export class SnapcraftBuilder {
     // Copy and update environment to pass to snapcraft
     const env: {[key: string]: string} = {}
     Object.assign(env, process.env)
-    env['SNAPCRAFT_BUILD_ENVIRONMENT'] = 'multipass'
     env['SNAPCRAFT_IMAGE_INFO'] = JSON.stringify(imageInfo)
     if (this.includeBuildInfo) {
       env['SNAPCRAFT_BUILD_INFO'] = '1'
     }
 
-    let snapcraft = 'snapcraft'
+    let snapcraft_args = '--destructive-mode'
     if (this.snapcraftArgs) {
-      snapcraft = `${snapcraft} ${this.snapcraftArgs}`
+      snapcraft_args = `${snapcraft_args} ${this.snapcraftArgs}`
     }
     if (this.uaToken) {
-      snapcraft = `${snapcraft} --ua-token ${this.uaToken}`
+      snapcraft_args = `${snapcraft_args} --ua-token ${this.uaToken}`
     }
 
-    await exec.exec('snapcraft', [], {
+    await exec.exec('snapcraft', [snapcraft_args], {
       cwd: this.projectRoot,
       env
     })
