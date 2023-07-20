@@ -4190,13 +4190,14 @@ async function ensureMultipass() {
     await exec.exec('ls', ['-l', '/var/snap/multipass/common/multipass_socket']);
     await exec.exec('groups');
     await exec.exec('whoami');
-    // Add user to 'sudo' group
-    await exec.exec('sudo', ['usermod', '-a', '-G', 'sudo', 'runner']);
-    // switch group hence and forth to activate it
-    await exec.exec('groups');
-    await exec.exec('newgrp', ['sudo']);
-    await exec.exec('newgrp', []);
-    await exec.exec('groups');
+    await exec.exec('sudo', ['chown', 'root:adm', '/var/snap/multipass/common/multipass_socket']);
+    // // Add user to 'sudo' group
+    // await exec.exec('sudo', ['usermod', '-a', '-G', 'sudo', 'runner'])
+    // // switch group hence and forth to activate it
+    // await exec.exec('groups')
+    // await exec.exec('newgrp', ['sudo'])
+    // await exec.exec('newgrp', [])
+    // await exec.exec('groups')
 }
 async function ensureSnapcraft(channel) {
     const haveSnapcraft = await haveExecutable('/snap/bin/snapcraft');
