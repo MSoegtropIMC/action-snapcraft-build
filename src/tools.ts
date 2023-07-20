@@ -47,30 +47,6 @@ export async function ensureSnapd(): Promise<void> {
   }
 }
 
-export async function ensureMultipass(): Promise<void> {
-  const haveMultipass = await haveExecutable('/snap/bin/multipass')
-  core.info('Installing Multipass...')
-  await exec.exec('sudo', [
-    'snap',
-    haveMultipass ? 'refresh' : 'install',
-    'multipass'
-  ])
-  // Wait until multipass started up - usually this takes 3..5 seconds
-  await hasFileTimeout('/var/snap/multipass/common/multipass_socket', 60)
-  // Check permissions
-  await exec.exec('ls', ['-l', '/var/snap/multipass/common/multipass_socket'])
-  await exec.exec('groups')
-  await exec.exec('whoami')
-  await exec.exec('sudo', ['chown', 'root:adm', '/var/snap/multipass/common/multipass_socket'])
-  // // Add user to 'sudo' group
-  // await exec.exec('sudo', ['usermod', '-a', '-G', 'sudo', 'runner'])
-  // // switch group hence and forth to activate it
-  // await exec.exec('groups')
-  // await exec.exec('newgrp', ['sudo'])
-  // await exec.exec('newgrp', [])
-  // await exec.exec('groups')
-}
-
 export async function ensureSnapcraft(channel: string): Promise<void> {
   const haveSnapcraft = await haveExecutable('/snap/bin/snapcraft')
   core.info('Installing Snapcraft...')
